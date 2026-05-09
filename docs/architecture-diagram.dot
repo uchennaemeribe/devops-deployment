@@ -1,0 +1,82 @@
+digraph DevOps_Deployment_Architecture {
+
+    rankdir=TB;
+    fontname="Arial";
+
+    node [
+        shape=box,
+        style=filled,
+        fontname="Arial"
+    ];
+
+    developer [
+        label="Developer",
+        shape=ellipse,
+        fillcolor="lightgreen"
+    ];
+
+    github [
+        label="GitHub Repository",
+        fillcolor="lightblue"
+    ];
+
+    github_actions [
+        label="GitHub Actions CI/CD",
+        fillcolor="orange"
+    ];
+
+    ssh [
+        label="SSH Deployment Automation",
+        fillcolor="lightyellow"
+    ];
+
+    azure_vm [
+        label="Azure Linux VM",
+        fillcolor="lightcyan"
+    ];
+
+    docker [
+        label="Docker Container\n(PHP + Apache)",
+        fillcolor="lightgrey"
+    ];
+
+    nginx [
+        label="Nginx Reverse Proxy",
+        fillcolor="lightyellow"
+    ];
+
+    dns [
+        label="Custom Domain DNS",
+        fillcolor="lightblue"
+    ];
+
+    domain [
+        label="app.auemeribetech.com.ng\nHTTPS Enabled",
+        fillcolor="lightcyan"
+    ];
+
+    users [
+        label="End Users",
+        shape=ellipse,
+        fillcolor="lightgreen"
+    ];
+
+    developer -> github;
+    github -> github_actions;
+    github_actions -> ssh;
+    ssh -> azure_vm;
+    azure_vm -> docker;
+    docker -> nginx;
+    nginx -> dns;
+    dns -> domain;
+    domain -> users;
+
+    subgraph cluster_azure {
+        label="Microsoft Azure";
+        style=dashed;
+
+        azure_vm;
+        docker;
+        nginx;
+    }
+}
