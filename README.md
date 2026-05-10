@@ -1682,20 +1682,39 @@ You successfully built:
 
 # Cleanup Resources
 
-Destroy Terraform infrastructure:
+1. Destroy Terraform infrastructure:
 
 ```bash
 cd terraform
 
 terraform destroy
 ```
+![Terraform Destroy](screenshots/terraform-destroy.png)
 
-Delete Azure watcher resource group:
+# Error Encountered and Troubleshooting
+
+![Terraform Error Deletion](screenshots/terraform-destroy-error.png)
+
+Troubleshooting
+
+a. Delete the DNS zone manually first:
+```bash
+az network dns zone delete --resource-group rg-php-devops --name auemeribetech.com.ng --yes 
+```
+![Azure DNS Deletion](screenshots/dns-deletion.png)
+
+b. Verify deletion:
+```bash
+az resource list --resource-group rg-php-devops --output table
+```
+![Azure DNS Deletion Verification](screenshots/dns-deletion-verification.png)
+
+c. Delete Azure watcher resource group:
 
 ```bash
 az group delete -n NetworkWatcherRG -y
 ```
-
+![Azure Network Resource Group Deletion](screenshots/network-rg-deletion.png)
 ---
 
 # Author
