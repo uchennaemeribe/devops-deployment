@@ -23,7 +23,7 @@ jobs:
           script: |
             sudo rm -rf devops-deployment
 
-            git clone https://github.com/YOUR_USERNAME/devops-deployment.git
+            git clone https://github.com/uchennaemeribe/devops-deployment.git
 
             cd devops-deployment/charitize
 
