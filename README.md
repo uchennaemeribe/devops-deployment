@@ -174,17 +174,17 @@ docker --version
 ---
 
 ## Step 4 — Install Graphviz
-
+1. Run:
 ```bash
 brew install graphviz
 ```
 
-Verify:
+2. Verify:
 
 ```bash
 dot -V
 ```
-
+![Graphviz Installation Verification](screenshots/graphviz-installation-verification.png)
 ---
 
 # PHASE 1 — PREPARE EXISTING PHP APPLICATION
@@ -280,35 +280,45 @@ git init
 git add .
 git commit -m "Initial commit - PHP app + Terraform + CI/CD"
 ```
-
+![Initialization of Git Repo, Staging all Files, and Creating Snapshots](screenshots/git-repo-initialization-staging-snapshot.png)
 ---
 
-## Step 10 — Create GitHub Repository
+## Step 10 — Change Brancch Name from Master to Main
 
-Go to GitHub:
-
-```text
-New Repository
-```
-
-Repository name:
-
-```text
-devops-deployment
-```
-
----
-
-## Step 11 — Connect Local Repository
+1. Confirm Current Branch:
 
 ```bash
-git remote add origin https://github.com/YOUR_USERNAME/devops-deployment.git
-
-git branch -M main
-
-git push -u origin main
+git branch
 ```
+![Confirmation of Current Branch](screenshots/current-branch-confirmation.png)
 
+2. Change GitHub Branch Name:
+
+```bash
+git branch -M main
+```
+![Changed Github Branch Name](screenshots/github-branch-name-change.png)
+---
+
+## Step 11 — Create and Push Repository
+1. Create repo
+```bash
+gh repo create devops-deployment --public --source=. --remote=origin --push
+```
+This single command:
+
+* creates the GitHub repository
+* connects remote origin
+* pushes your local code
+* sets upstream automatically
+
+![GitHub Creation](screenshots/github-repo-creation.png)
+
+2. Confirm/verify the correct created repository where the resources will be push
+```bash
+git remote -v
+```
+![Verification of Created GitHub Repository](screenshots/github-creation-verification.png)
 ---
 
 # PHASE 3 — CONFIGURE AZURE INFRASTRUCTURE
@@ -320,7 +330,7 @@ git push -u origin main
 ```bash
 az login
 ```
-
+![Azure Login](screenshots/azure-login.png)
 ---
 
 ## Step 13 — Create Terraform Folder
@@ -329,11 +339,11 @@ az login
 mkdir terraform
 cd terraform
 ```
-
+![Creation of Terraform Directory](screenshots/terraform-directory-creation.png)
 Create:
 
-```text
-main.tf
+```bash
+nano main.tf
 ```
 
 ---
@@ -351,10 +361,18 @@ provider "azurerm" {
   features {}
 }
 
+# =========================================
+# Resource Group
+# =========================================
+
 resource "azurerm_resource_group" "rg" {
   name     = "rg-php-devops"
-  location = "West Europe"
+  location = "West US 3"
 }
+
+# =========================================
+# Virtual Network
+# =========================================
 
 resource "azurerm_virtual_network" "vnet" {
   name                = "vnet-php"
@@ -363,6 +381,10 @@ resource "azurerm_virtual_network" "vnet" {
   resource_group_name = azurerm_resource_group.rg.name
 }
 
+# =========================================
+# Subnet
+# =========================================
+
 resource "azurerm_subnet" "subnet" {
   name                 = "subnet-php"
   resource_group_name  = azurerm_resource_group.rg.name
@@ -370,11 +392,16 @@ resource "azurerm_subnet" "subnet" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
+# =========================================
+# Network Security Group
+# =========================================
+
 resource "azurerm_network_security_group" "nsg" {
   name                = "nsg-php"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
 
+  # SSH
   security_rule {
     name                       = "SSH"
     priority                   = 1001
@@ -387,6 +414,7 @@ resource "azurerm_network_security_group" "nsg" {
     destination_address_prefix = "*"
   }
 
+  # HTTP
   security_rule {
     name                       = "HTTP"
     priority                   = 1002
@@ -399,6 +427,7 @@ resource "azurerm_network_security_group" "nsg" {
     destination_address_prefix = "*"
   }
 
+  # HTTPS
   security_rule {
     name                       = "HTTPS"
     priority                   = 1003
@@ -411,6 +440,7 @@ resource "azurerm_network_security_group" "nsg" {
     destination_address_prefix = "*"
   }
 
+  # Docker Application Port
   security_rule {
     name                       = "AllowDocker"
     priority                   = 1004
@@ -424,6 +454,10 @@ resource "azurerm_network_security_group" "nsg" {
   }
 }
 
+# =========================================
+# Public IP
+# =========================================
+
 resource "azurerm_public_ip" "pip" {
   name                = "php-public-ip"
   location            = azurerm_resource_group.rg.location
@@ -431,10 +465,18 @@ resource "azurerm_public_ip" "pip" {
   allocation_method   = "Static"
 }
 
+# =========================================
+# Network Interface
+# =========================================
+
 resource "azurerm_network_interface" "nic" {
   name                = "php-nic"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
+
+  depends_on = [
+    azurerm_subnet.subnet
+  ]
 
   ip_configuration {
     name                          = "internal"
@@ -444,19 +486,33 @@ resource "azurerm_network_interface" "nic" {
   }
 }
 
+# =========================================
+# Attach NSG to NIC
+# =========================================
+
 resource "azurerm_network_interface_security_group_association" "assoc" {
   network_interface_id      = azurerm_network_interface.nic.id
   network_security_group_id = azurerm_network_security_group.nsg.id
 }
 
+# =========================================
+# Linux Virtual Machine
+# =========================================
+
 resource "azurerm_linux_virtual_machine" "vm" {
   name                = "php-vm"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-  size                = "Standard_B1s"
+  size                = "Standard_D2s_v3"
   admin_username      = "azureuser"
 
-  network_interface_ids = [azurerm_network_interface.nic.id]
+  network_interface_ids = [
+    azurerm_network_interface.nic.id
+  ]
+
+  depends_on = [
+    azurerm_network_interface_security_group_association.assoc
+  ]
 
   admin_ssh_key {
     username   = "azureuser"
@@ -475,8 +531,24 @@ resource "azurerm_linux_virtual_machine" "vm" {
     version   = "latest"
   }
 }
-```
 
+# =========================================
+# Outputs
+# =========================================
+
+output "public_ip" {
+  value = azurerm_public_ip.pip.ip_address
+}
+
+output "vm_name" {
+  value = azurerm_linux_virtual_machine.vm.name
+}
+
+output "resource_group" {
+  value = azurerm_resource_group.rg.name
+}
+```
+![Terraform Configuration File Creation](screenshots/terraform-configuration-file-creation.png)
 ---
 
 ## Step 15 — Initialize Terraform
@@ -484,7 +556,7 @@ resource "azurerm_linux_virtual_machine" "vm" {
 ```bash
 terraform init
 ```
-
+![Terraform Initialization](screenshots/terraform-initialization.png)
 ---
 
 ## Step 16 — Validate Terraform
@@ -492,21 +564,31 @@ terraform init
 ```bash
 terraform validate
 ```
-
+![Terraform Validation](screenshots/terraform-validation.png)
 ---
 
-## Step 17 — View Terraform Plan
-
+## Step 17 — View and Inspect Terraform Plan
+1. Run:
 ```bash
-terraform plan
+terraform plan -out=tfplan
 ```
+![Terraform Plan](screenshots/terraform-plan.png)
 
+2. This creates a file, which contains exactly what Terraform will do:
+```text
+tfplan
+```
+3. Inspect plan
+```bash
+terraform show tfplan
+```
+![Terraform Show](screenshots/terraform-show.png)
 ---
 
 ## Step 18 — Provision Azure Infrastructure
 
 ```bash
-terraform apply
+terraform apply tfplan
 ```
 
 Type:
@@ -514,7 +596,7 @@ Type:
 ```text
 yes
 ```
-
+![Terraform Apply](screenshots/terraform.apply.png)
 ---
 
 # PHASE 4 — CONNECT TO AZURE VM
@@ -522,15 +604,16 @@ yes
 ---
 
 ## Step 19 — Get Azure VM Public IP
-
+1. Method 1
 ```bash
-az vm show -d \
--g rg-php-devops \
--n php-vm \
---query publicIps \
--o tsv
+terraform output public_ip
 ```
-
+![Azure VM Public IP Retrieval - Method 1](screenshots/ip-retrieval-method-1.png)
+2. Method 2
+```bash
+az vm show -d -g rg-php-devops -n php-vm --query publicIps -o tsv
+```
+![Azure VM Public IP Retrieval - Method 2](screenshots/ip-retrieval-method-2.png)
 ---
 
 ## Step 20 — SSH Into Azure VM
@@ -542,8 +625,9 @@ ssh azureuser@YOUR_PUBLIC_IP
 Example:
 
 ```bash
-ssh azureuser@20.40.50.60
+ssh azureuser@20.106.122.173
 ```
+![Logged Into Azure VM](screenshots/azure-vm-accessed.png)
 
 ---
 
@@ -556,45 +640,51 @@ ssh azureuser@20.40.50.60
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
-
+![Updated Ubuntu Server](screenshots/ubuntu-server-update.png)
 ---
 
 ## Step 22 — Install Docker
-
+1. Run to install:
 ```bash
 sudo apt install docker.io -y
 ```
+![Docker Installation](screenshots/docker-installed.png)
 
-Enable Docker:
+2. Enable Docker:
 
 ```bash
 sudo systemctl enable docker
 ```
+![Docker Enabled](screenshots/docker-enabled.png)
 
-Start Docker:
+2. Start Docker:
 
 ```bash
 sudo systemctl start docker
 ```
-
+![Docker Started](screenshots/docker-start.png)
 ---
 
 ## Step 23 — Verify Docker
-
+1. Run:
 ```bash
 docker --version
 ```
-
+![Docker Installation Verification](screenshots/docker-installation-verification.png)
 ---
 
 ## Step 24 — Add User to Docker Group
-
+1. Run:
 ```bash
 sudo usermod -aG docker azureuser
 ```
+![Docker Group User Addition](screenshots/docker-group-user-addition.png)
 
-Reconnect SSH afterward.
-
+2. Reconnect SSH afterward, but exit the azure vm using:
+```bash
+exit
+```
+![Azure VM Logout](screenshots/azure-vm-logout.png)
 ---
 
 # PHASE 6 — CONFIGURE CI/CD PIPELINE
@@ -617,10 +707,10 @@ Create:
 
 ## Step 26 — Add GitHub Actions Workflow
 
-Paste into:
+1. Use text editor to modify deploy.yml file:
 
-```text
-.github/workflows/deploy.yml
+```bash
+nano .github/workflows/deploy.yml
 ```
 
 ```yaml
@@ -653,7 +743,7 @@ jobs:
           sudo docker rm php-app || true
           sudo docker run -d -p 3000:80 --name php-app php-app
 ```
-
+![GitHub Actions Workflow Addition](screenshots/github-actions-workflow-addition.png)
 ---
 
 # PHASE 7 — CREATE .gitignore
@@ -664,179 +754,394 @@ jobs:
 
 Create:
 
-```text
-.gitignore
+```bash
+nano .gitignore
 ```
 
 Add:
 
 ```gitignore
-# Terraform
-.terraform/
-*.tfstate
-*.tfstate.*
-crash.log
+# Node.js
+node_modules/
+npm-debug.log
 
-# Sensitive Files
+# Environment variables
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+tfplan
+*.tfplan
+
+# SSH Keys (CRITICAL SECURITY)
 *.pem
 *.key
 
-# Logs
-*.log
+# Docker
+docker-compose.override.yml
 
-# macOS
-.DS_Store
-
-# Windows
-Thumbs.db
-
-# Node
-node_modules/
-
-# VS Code
+# IDE
 .vscode/
+.idea/
+```
+![Creation of .gitignore](screenshots/creation-of-.gitignore-file.png)
+---
 
-# Environment Variables
-.env
+## PHASE 8 — CONFIGURE GITHUB SECRETS
+
+---
+
+## Step 28 — Generate SSH Key Pair
+
+Move into project directory:
+
+```bash
+cd devops-deployment
 ```
 
----
+Generate SSH key pair:
 
-# PHASE 8 — CONFIGURE GITHUB SECRETS
+```bash
+ssh-keygen -t rsa -b 4096
+```
 
----
+Press ENTER to accept the default save location.
 
-## Step 28 — Add GitHub Secrets
-
-Go to:
+The following files are created automatically:
 
 ```text
-GitHub Repository
-→ Settings
-→ Secrets and Variables
-→ Actions
-→ New Repository Secret
+~/.ssh/id_rsa
+~/.ssh/id_rsa.pub
+```
+![Generated SSH Key Pair](screenshots/ssh-key-pair-generation.png)
+---
+
+## Step 29 — Authenticate GitHub CLI
+
+1. Login to GitHub CLI:
+
+```bash
+gh auth login
+```
+![GitHub CLI Login](screenshots/github-cli-login.png)
+
+2. Verify authentication:
+
+```bash
+gh auth status
+```
+![Authentication Verification](screenshots/authentification-verification.png)
+---
+
+## Step 30 — Create GitHub Repository Secrets
+
+1. Retrieve VM Public IP using:
+```bash
+cd terraform
+terraform output public_ip
+```
+![Retrieval of Public IP Using Trrraform Output](screenshots/public-ip-retrieval-using-terraform.png)
+
+2. Create VM host secret:
+
+```bash
+gh secret set VM_HOST
 ```
 
-Add:
-
-### VM_HOST
+3. Enter:
 
 ```text
 YOUR_VM_PUBLIC_IP
 ```
+![GitHub Secret VH_HOST Configuration (Method 1)](screenshots/github-secret-vm_host-configuration-method_1.png)
 
-### VM_USER
+4. Alternatively create VM host secret using
+```bash
+gh secret set VM_HOST --body "EC2_public_IP"
+```
+![GitHub Secret VH_HOST Configuration (Method 2)](screenshots/github-secret-vm_host-configuration-method_2.png)
+
+5. Create VM username secret:
+
+```bash
+gh secret set VM_USER
+```
+
+6. Enter:
 
 ```text
 azureuser
 ```
+![Configuration of GitHub Secret For Azure User (Method 1)](screenshots/github-secret-vm_user-configuration-method_1.png)
 
-### SSH_PRIVATE_KEY
+7. Alternatively creat
+```bash
+gh secret set VM_USER --body "azureuser"
+```
+![Configuration of GitHub Secret For Azure User (Method 2)](screenshots/github-secret-vm_user-configuration-method_2.png)
 
-View private key:
+8. Create SSH private key secret without copy-and-paste:
 
 ```bash
-cat ~/.ssh/id_rsa
+gh secret set SSH_PRIVATE_KEY < ~/.ssh/id_rsa
+```
+![Configuration of GitHub Secret For Azure VM Private Key](screenshots/github-secret-private-key-configuration.png)
+9. Optional: upload public key secret:
+
+```bash
+gh secret set VM_PUBLIC_KEY < ~/.ssh/id_rsa.pub
 ```
 
-Copy entire output and paste into GitHub Secret.
+10. Verify secrets:
 
+```bash
+gh secret list
+```
+Expected:
+
+```text
+SSH_PRIVATE_KEY
+VM_HOST
+VM_PUBLIC_KEY
+VM_USER
+```
+![GitHub Secret Verification](screenshots/github-secret-list-verification.png)
 ---
 
 # PHASE 9 — TEST MANUAL DEPLOYMENT
 
 ---
 
-## Step 29 — Clone Repository on VM
+## Step 31 — SSH Into Azure VM
+
+1. Retrieve Azure VM Public IP:
+```bash
+cd terraform
+terraform output public_ip
+```
+![Retrieval of Public IP Using Trrraform Output](screenshots/public-ip-retrieval-using-terraform.png)
+
+2. Connect to the Azure VM using the retrieved Public IP:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/devops-deployment.git
+ssh azureuser@YOUR_VM_PUBLIC_IP
 ```
 
+Example:
+
+```bash
+ssh azureuser@20.106.122.173
+```
+![Logged Into Azure VM](screenshots/azure-vm-accessed.png)
 ---
 
-## Step 30 — Build Docker Image
+## Step 32 — Clone Repository on VM
+1. Run:
+```bash
+git clone https://github.com/uchennaemeribe/devops-deployment.git
+```
+![Cloned GitHub Repo on Azure VM](screenshots/githubrepo-clonning-in-azure-vm.png)
+
+2. Move into application directory:
 
 ```bash
 cd devops-deployment/charitize
-
-sudo docker build -t php-app .
 ```
-
+![Accessed Application Directory on Azure VM](screenshots/logged-into-application-directory-in-vm.png)
 ---
 
-## Step 31 — Run Docker Container
+## Step 33 — Verify Existing Containers on Port 3000
 
-```bash
-sudo docker run -d -p 3000:80 --name php-app php-app
-```
-
-Verify:
+1. Check running containers:
 
 ```bash
 sudo docker ps
 ```
 
----
+2. Check whether port 3000 is already in use:
 
-## Step 32 — Test Application
-
-Open:
-
-```text
-http://YOUR_VM_PUBLIC_IP:3000
+```bash
+sudo lsof -i :3000
 ```
 
+3. If a container is already using port 3000, stop it:
+
+```bash
+sudo docker stop php-app
+```
+
+4. Remove the container:
+
+```bash
+sudo docker rm php-app
+```
+
+5. Verify the port is free:
+
+```bash
+sudo lsof -i :3000
+```
+
+6. No output means the port is available.
+
+![Docker Container Status Verifying the Availability of Port 3000](screenshots/docker-status-verifying-port-3000-availability.png)
 ---
 
-# PHASE 10 — CONFIGURE CUSTOM DOMAIN DNS
+## Step 34 — Build Docker Image
+
+1. Build Docker image:
+
+```bash
+sudo docker build -t php-app .
+```
+![Built Docker Image](screenshots/built-docker-image-in-azure-vm.png)
+
+2. Verify image creation:
+
+```bash
+sudo docker images
+```
+![Built Docker Image Verification](screenshots/docker-image-creation-verification-in-azure-vm.png)
+---
+
+## Step 35 — Run Docker Container
+
+1. Run the container:
+
+```bash
+sudo docker run -d -p 3000:80 --name php-app php-app
+```
+![Docker Container Creation](screenshots/docker-run-in-azure-vm.png)
+
+3. Verify container status:
+
+```bash
+sudo docker ps
+```
+
+Expected:
+- container status should display `Up`
+- port mapping should display `3000->80`
+
+![Docker Container Creation Verification](screenshots/docker-container-creation-verification-in-azure-vm.png)
+---
+
+## Step 36 — Test Application
+
+1. Open in browser:
+
+```text
+http://20.106.122.173:3000
+```
+
+The PHP application should now load successfully.
+![Application Tested Using Browser Verification](screenshots/application-tested-using-browser.png)
+
+2. After successfully testing of the application using the browser, exit the azure vm using:
+```bash
+exit
+```
+![Azure VM Logout](screenshots/azure-vm-logout.png)
 
 ---
 
-## Step 33 — Configure DNS Record
+# PHASE 10 — CONFIGURE CUSTOM DOMAIN DNS (AZURE DNS)
 
-Go to your domain registrar dashboard:
+---
 
-- Namecheap
+# Step 37 - Create Azure DNS Zone
+1. Azure DNS is a separate Azure managed service, not software installed on the VM. Following exit from the azure vm, run:
+
+```bash
+az network dns zone create --resource-group rg-php-devops --name auemeribetech.com.ng
+```
+![Azure DNS Zone Creation](screenshots/azure-dns-zone-creation.png)
+---
+
+## Step 38 — Get Azure Nameservers
+
+```bash
+az network dns zone show --resource-group rg-php-devops --name auemeribetech.com.ng --query nameServers
+```
+![Azure DNS Nameservers Retrieval](screenshots/azure-nameservers-retrieval.png)
+Copy the nameservers.
+
+---
+
+## Step 39 — Update Nameservers at Domain Registrar
+
+1. Login to:
 - QServers
-- GoDaddy
-- Cloudflare
+2. Proceed to:
+- My Domain
+2. Click on:
+- My Domain
 
-Create:
+![Qservers Navigation to Nameservers' Configuration](screenshots/qservers-navigation-to-nameserver.png)
 
-```text
-Type: A
-Host: app
-Value: YOUR_VM_PUBLIC_IP
-TTL: Automatic
+2. Replace existing nameservers with Azure nameservers.
+
+![Domain Registrar Update Using Nameservers](screenshots/domain-registrar-update-with-nameservers.png)
+
+3. Wait for propagation
+
+4. After approximately 10–15 minutes, verify that the domain is now using Azure DNS nameservers.
+
+Run:
+
+```bash
+dig auemeribetech.com.ng NS
+```
+![Domain Verification on Using Nameservers](screenshots/domain-nameserver-verification.png)
+---
+
+## Step 40 — Create Root Domain A Record
+
+```bash
+az network dns record-set a add-record --resource-group rg-php-devops --zone-name auemeribetech.com.ng --record-set-name @ --ipv4-address 20.106.122.173
+```
+![Root Domain A Record Creation](screenshots/root-domain-a-record-creation.png)
+---
+
+## Step 41 — Create WWW Record
+
+```bash
+az network dns record-set a add-record --resource-group rg-php-devops --zone-name auemeribetech.com.ng --record-set-name www --ipv4-address 20.106.122.173
 ```
 
+![WWW Record Creation](screenshots/www-record-creation.png)
+
 ---
 
-## Step 34 — Verify DNS
+# PHASE 11 — CONFIGURE NGINX REVERSE PROXY (DOMAIN NAME CONFIGURATION IN NGINX)
 
-Open:
+---
 
-```text
-http://app.auemeribetech.com.ng
+## Step 42 — Install Nginx
+1. Access the Azure VM
+```bash
+ssh azureuser@20.106.122.173
 ```
+![Logged Into Azure VM](screenshots/azure-vm-accessed.png)
 
----
-
-# PHASE 11 — CONFIGURE NGINX REVERSE PROXY
-
----
-
-## Step 35 — Install Nginx
-
+2. Run
 ```bash
 sudo apt install nginx -y
 ```
-
+![Nginx Installation on Azure VM](screenshots/nginx-installation-on-azure-vm.png)
 ---
 
-## Step 36 — Configure Reverse Proxy
+## Step 43 — Configure Reverse Proxy
 
 Edit:
 
@@ -866,61 +1171,194 @@ server {
 
 ---
 
-## Step 37 — Restart Nginx
-
+## Step 44 — Restart Nginx
+1. Run:
 ```bash
 sudo systemctl restart nginx
 ```
+![Updating Nginx](screenshots/nginx-configuration-update.png)
 
-Verify:
+2. Verify:
 
 ```bash
 sudo systemctl status nginx
 ```
+![Nginx Configuration Status](screenshots/nginx-configuration-status.png)
 
+3. Restart Nginx:
+
+```bash
+sudo systemctl restart nginx
+```
+![Restarting Nginx](screenshots/nginx_restart.png)
+
+4. Test:
+
+```text
+http://www.auemeribetech.com.ng
+```
+![Domain Name Testing](screenshots/domain-name-testing.png)
 ---
 
 # PHASE 12 — ENABLE HTTPS
 
 ---
 
-## Step 38 — Install Certbot
+## Step 45 — Install Certbot
 
 ```bash
 sudo apt install certbot python3-certbot-nginx -y
 ```
-
+![Certbot Installation](screenshots/certbot-installation.png)
 ---
 
-## Step 39 — Generate SSL Certificate
+## Step 46 — Generate SSL Certificate
 
 ```bash
 sudo certbot --nginx -d app.auemeribetech.com.ng
 ```
 
 Choose:
+- auemeribetech.com.ng
+- www.auemeribetech.com.ng
+- redirect HTTP to HTTPS
+
+
+## Certbot SSL Failure — NXDOMAIN DNS Error
+
+### Error
 
 ```text
-Redirect HTTP to HTTPS
+Certbot failed to authenticate some domains
+
+DNS problem: NXDOMAIN looking up A for app.auemeribetech.com.ng
+```
+![NXDOMAIN DNS Error](screenshots/nxdomain-dns-error.png)
+---
+
+## Cause
+
+The subdomain:
+
+```text
+app.auemeribetech.com.ng
+```
+
+did not exist in Azure DNS.
+
+Certbot could not verify domain ownership because no DNS record pointed the domain to the Azure VM public IP.
+
+---
+
+## Troubleshooting Steps
+
+### 1. Verify DNS Record
+
+Run locally:
+
+```bash
+nslookup app.auemeribetech.com.ng
+```
+
+If DNS is not configured correctly, you may see:
+
+```text
+NXDOMAIN
+```
+![DNS Record Verification](screenshots/dns-propagation-verification.png)
+---
+
+### 2. Create Azure DNS A Record
+
+Run outside the VM on your local machine:
+
+```bash
+az network dns record-set a add-record --resource-group rg-php-devops --zone-name auemeribetech.com.ng --record-set-name app --ipv4-address YOUR_VM_PUBLIC_IP
+```
+
+Example:
+
+```bash
+az network dns record-set a add-record --resource-group rg-php-devops --zone-name auemeribetech.com.ng --record-set-name app --ipv4-address 20.106.122.173
+```
+![Azure DNS A Record Creation](screenshots/dns-record-creation-for-app.auemeribetech.com.png)
+---
+
+### Step 3 — Verify DNS Propagation
+
+Run:
+
+```bash
+nslookup app.auemeribetech.com.ng
+```
+
+Expected:
+
+```text
+20.106.122.173
+```
+
+You can also verify using:
+
+```bash
+dig app.auemeribetech.com.ng
+```
+![Azure DNS Propagation Verification](screenshots/dns-propagation-verification.png)
+---
+
+### Step 4 — Verify HTTP Access
+
+Before generating SSL, ensure the application is reachable over HTTP:
+
+```bash
+curl http://app.auemeribetech.com.ng
+```
+![HTTP Access Verification](screenshots/browser-verification-for-app.auemeribetech.com.png)
+---
+
+### Step 5 — Retry Certbot
+
+SSH into the Azure VM:
+
+```bash
+ssh azureuser@YOUR_VM_PUBLIC_IP
+```
+
+Run:
+
+```bash
+sudo certbot --nginx -d app.auemeribetech.com.ng
 ```
 
 ---
 
-## Step 40 — Verify HTTPS
+## Resolution
+
+After creating the Azure DNS A record and waiting for propagation:
+
+- DNS resolved successfully
+- Certbot verified domain ownership
+- SSL certificate was generated successfully
+- HTTPS became active
+
+![SSL Certificate Configuration](screenshots/ssl-certificate-configuration.png)
+---
+
+## Step 47 — Verify HTTPS
 
 Open:
 
 ```text
 https://app.auemeribetech.com.ng
 ```
-
+![HTTPS Access Verification](screenshots/https-browser-verification-for-app.auemeribetech.com.png)
 ---
 
 # PHASE 13 — TEST FULL CI/CD PIPELINE
 
 ---
 
-## Step 41 — Make Application Change
+## Step 48 — Make Application Change
 
 Edit:
 
@@ -931,12 +1369,12 @@ index.php
 Add:
 
 ```text
-Your Techie Hub
+AUEmeribe Tech Hub
 ```
 
 ---
 
-## Step 42 — Push Changes
+## Step 49 — Push Changes
 
 ```bash
 git add .
@@ -948,7 +1386,7 @@ git push origin main
 
 ---
 
-## Step 43 — Verify GitHub Actions
+## Step 50 — Verify GitHub Actions
 
 Go to:
 
@@ -961,7 +1399,7 @@ Watch pipeline execute automatically.
 
 ---
 
-## Step 44 — Verify Live Application
+## Step 51 — Verify Live Application
 
 Open:
 
@@ -975,7 +1413,7 @@ https://app.auemeribetech.com.ng
 
 ---
 
-## Step 45 — Create Documentation Folder
+## Step 52 — Create Documentation Folder
 
 ```bash
 mkdir -p docs/achitecture-diagram.dot
@@ -984,7 +1422,7 @@ touch docs/achitecture-diagram.dot
 
 ---
 
-## Step 46 — Create Architecture Code File
+## Step 53 — Create Architecture Code File
 
 Create:
 
@@ -994,7 +1432,7 @@ docs/architecture.dot
 
 ---
 
-## Step 47 — Add Graphviz Architecture Code
+## Step 54 — Add Graphviz Architecture Code
 
 Paste into:
 
@@ -1089,7 +1527,7 @@ digraph DevOps_Deployment_Architecture {
 ![Architecture Codes](screenshots/architecture-codes.png)
 ---
 
-## Step 48 — Generate Architecture Diagram
+## Step 55 — Generate Architecture Diagram
 
 Generate PNG:
 
@@ -1105,7 +1543,7 @@ dot -Tsvg docs/architecture-diagram.dot -o screenshots/architecture-creation-svg
 ![Architecture Creation (SVG Version)](screenshots/architecture-creation-svg-version.png)
 ---
 
-## Step 49 — Open Architecture Diagram
+## Step 53 — Open Architecture Diagram
 
 ```bash
 open docs/architecture.png
@@ -1113,7 +1551,7 @@ open docs/architecture.png
 
 ---
 
-## Step 50 — Add Diagram to README
+## Step 56 — Add Diagram to README
 
 ```markdown
 # Architecture Diagram
@@ -1121,7 +1559,7 @@ open docs/architecture.png
 ![Architecture Diagram](docs/architecture-diagram.png)
 ---
 
-## Step 51 — Push Architecture Updates
+## Step 55 — Push Architecture Updates
 
 ```bash
 git add .
