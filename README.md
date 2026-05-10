@@ -1427,7 +1427,7 @@ Open:
 ```text
 https://app.auemeribetech.com.ng
 ```
-
+![Live Application Verification](screenshots/live-application-verification.png)
 ---
 
 # PHASE 14 — DEVELOP PROJECT ARCHITECTURE DIAGRAM
