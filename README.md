@@ -1346,12 +1346,18 @@ After creating the Azure DNS A record and waiting for propagation:
 
 ## Step 47 — Verify HTTPS
 
-Open:
+1. Open:
 
 ```text
 https://app.auemeribetech.com.ng
 ```
 ![HTTPS Access Verification](screenshots/https-browser-verification-for-app.auemeribetech.com.png)
+
+2. The Azure VM can now be exited to test the full CI/CD pipeline using
+```bash
+exit
+```
+![Azure VM Logout](screenshots/azure-vm-logout.png)
 ---
 
 # PHASE 13 — TEST FULL CI/CD PIPELINE
@@ -1371,24 +1377,26 @@ Add:
 ```text
 AUEmeribe Tech Hub
 ```
-
+![Application Change on Index.php File](screenshots/application-change-on-index.php.png)
 ---
 
 ## Step 49 — Push Changes
 
 ```bash
+git remote -v
+
 git add .
 
 git commit -m "Testing CI/CD deployment"
 
 git push origin main
 ```
-
+![Verification and Updating the Project GitHub Repository](screenshots/github-repo-verification-and-pushed-changes-to-repo.png)
 ---
 
 ## Step 50 — Verify GitHub Actions
 
-Go to:
+1. Go to:
 
 ```text
 GitHub Repository
@@ -1397,6 +1405,7 @@ GitHub Repository
 
 Watch pipeline execute automatically.
 
+![GitHub Action Verification](screenshots/github-action-verification.png)
 ---
 
 ## Step 51 — Verify Live Application
