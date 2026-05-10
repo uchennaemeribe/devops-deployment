@@ -10,19 +10,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: Deploy to VM
-      uses: appleboy/ssh-action@v0.1.6
-      with:
-        host: ${{ secrets.VM_HOST }}
-        username: ${{ secrets.VM_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          sudo rm -rf devops-deployment
-          sudo git clone https://github.com/YOUR_USERNAME/devops-deployment.git
-          cd devops-deployment/charitize
-          sudo docker build -t php-app .
-          sudo docker stop php-app || true
-          sudo docker rm php-app || true
-          sudo docker run -d -p 3000:80 --name php-app php-app
+      - name: Deploy Application to Azure VM
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+          script: |
+            sudo rm -rf devops-deployment
+
+            git clone https://github.com/YOUR_USERNAME/devops-deployment.git
+
+            cd devops-deployment/charitize
+
+            sudo docker stop php-app || true
+
+            sudo docker rm php-app || true
+
+            sudo docker rmi php-app || true
+
+            sudo docker build --no-cache -t php-app .
+
+            sudo docker run -d -p 3000:80 --name php-app php-app
+
+            sudo docker ps
